@@ -23,6 +23,7 @@ done
 PORT=38010
 CLOUDFLARED_LOG="/tmp/cloudflared-tunnel-$PORT.log"
 TTYD_LOG="/tmp/ttyd-$PORT.log"
+TTYD_PID_FILE="/tmp/ttyd.pid"
 WAIT_TIMEOUT=60
 # ---------------------------------------------------
 
@@ -54,26 +55,7 @@ fi
 # --- 2. Cleanup & Port Release ---
 echo "=== 2. Force releasing port $PORT ==="
 
-# Install psmisc for 'fuser' if missing
-if ! command -v fuser &> /dev/null; then
-    apt-get update && apt-get install -y psmisc
-fi
-
-# Force kill any process holding the port (IPv4 or IPv6)
-fuser -k -n tcp "$PORT" || true
-
-# Loop to ensure the port is actually free before proceeding
-echo "Waiting for port $PORT to clear..."
-count=0
-while ss -lptn "sport = :$PORT" | grep -q "$PORT"; do
-    sleep 0.5
-    ((count++))
-    if [ $count -ge 10 ]; then
-        echo "❌ Port $PORT is stuck. Attempting SIGKILL on ttyd..."
-        pkill -9 ttyd || true
-        sleep 1
-    fi
-done
+free_port "$PORT" "ttyd -i"
 echo "✅ Port $PORT is free."
 
 # --- 3. Install Dependencies (if missing) ---
@@ -94,9 +76,14 @@ echo "=== Starting ttyd on 127.0.0.1:$PORT ==="
 
 # 1. setsid: Detaches process from current shell so it survives script exit.
 # 2. -i 127.0.0.1: STRICTLY binds to IPv4 loopback to prevent IPv6 resolution errors.
-nohup setsid ttyd -i 127.0.0.1 -W -p "$PORT" -t enableTrzsz=true -c "$JSONBINKEY:$JSONBINKEY" bash > "$TTYD_LOG" 2>&1 &
-TTYD_PID=$!
-disown $TTYD_PID # Remove from jobs list
+# nohup setsid ttyd -i 127.0.0.1 -W -p "$PORT" -t enableTrzsz=true -c "$JSONBINKEY:$JSONBINKEY" bash > "$TTYD_LOG" 2>&1 &
+# TTYD_PID=$!
+# disown $TTYD_PID # Remove from jobs list
+
+stop_daemon "ttyd" $TTYD_PID_FILE
+start_daemon "ttyd" $TTYD_PID_FILE $TTYD_LOG "ttyd -i 127.0.0.1 -W -p $PORT -t enableTrzsz=true -c $JSONBINKEY:$JSONBINKEY bash"
+
+
 
 sleep 1
 

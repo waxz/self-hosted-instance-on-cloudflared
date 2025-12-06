@@ -55,45 +55,7 @@ fi
 
 # --- 2. Port Cleanup ---
 echo "=== 2. Clearing port $PORT ==="
-
-
-# Install fuser if missing
-if ! command -v fuser &> /dev/null; then
-    apt-get update && apt-get install -y psmisc
-fi
-
-# Step 1: Kill by process name first (most reliable)
-echo "Killing existing v2ray processes..."
-pkill -9 -f "v2ray run" || true
-sleep 1
-
-# Step 2: Kill anything on the port
-echo "Killing anything on port $PORT..."
-fuser -k -9 "$PORT/tcp" 2>/dev/null || true
-sleep 1
-
-# Step 3: Wait for port to be free with timeout
-echo "Waiting for port $PORT to be free..."
-MAX_WAIT=20
-count=0
-while ss -tlnp | grep -q ":$PORT "; do
-    sleep 1
-    ((count++))
-    if [ $count -ge $MAX_WAIT ]; then
-        echo "❌ Port $PORT still in use after ${MAX_WAIT}s. Exiting."
-        echo "Processes on port:"
-        ss -tlnp | grep ":$PORT " || true
-        lsof -i :$PORT || true
-        exit 1
-    fi
-    
-    # Retry kill every 5 seconds
-    if [ $((count % 5)) -eq 0 ]; then
-        echo "Retrying kill..."
-        pkill -9 -f "v2ray run" || true
-        fuser -k -9 "$PORT/tcp" 2>/dev/null || true
-    fi
-done
+free_port "$PORT" "v2ray run"
 
 echo "✅ Port $PORT is free."
 

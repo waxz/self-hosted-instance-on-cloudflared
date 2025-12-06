@@ -158,3 +158,55 @@ stop_daemon() {
         echo "✅ $name stopped (PID: $pid)"
     fi
 }
+
+# Kill process and free port
+# Usage: free_port <port> [process_pattern] [max_wait]
+# Example: free_port 10000 "v2ray run" 20
+free_port() {
+    local port="$1"
+    local process_pattern="${2:-}"
+    local max_wait="${3:-20}"
+    
+    echo "=== Clearing port $port ==="
+    
+    # Install fuser if missing
+    if ! command -v fuser &> /dev/null; then
+        apt-get update && apt-get install -y psmisc
+    fi
+    
+    # Step 1: Kill by process name if provided
+    if [ -n "$process_pattern" ]; then
+        echo "Killing processes matching: $process_pattern"
+        pkill -9 -f "$process_pattern" || true
+        sleep 1
+    fi
+    
+    # Step 2: Kill anything on the port
+    echo "Killing anything on port $port..."
+    fuser -k -9 "$port/tcp" 2>/dev/null || true
+    sleep 1
+    
+    # Step 3: Wait for port to be free
+    echo "Waiting for port $port to be free..."
+    local count=0
+    while ss -tlnp | grep -q ":$port "; do
+        sleep 1
+        ((count++))
+        
+        if [ $count -ge $max_wait ]; then
+            echo "❌ Port $port still in use after ${max_wait}s"
+            ss -tlnp | grep ":$port " || true
+            return 1
+        fi
+        
+        # Retry kill every 5 seconds
+        if [ $((count % 5)) -eq 0 ]; then
+            echo "Retrying kill..."
+            [ -n "$process_pattern" ] && pkill -9 -f "$process_pattern" || true
+            fuser -k -9 "$port/tcp" 2>/dev/null || true
+        fi
+    done
+    
+    echo "✅ Port $port is free."
+    return 0
+}
