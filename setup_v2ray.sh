@@ -206,5 +206,6 @@ echo "Sub:  vmess://..."
 cat "$SUB_VMESS_PATH"
 echo
 echo "Uploading to JSONBIN..."
+echo "$JSONBINURL/$JSONBINV2RAYPATH/?key=$JSONBINKEY&q=sub" "->" @"$PUBLIC_URL"
 curl -s "$JSONBINURL/$JSONBINV2RAYPATH/?key=$JSONBINKEY&q=sub" -d @"$SUB_VMESS_PATH"
 echo ""

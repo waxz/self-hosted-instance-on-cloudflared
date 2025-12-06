@@ -29,7 +29,7 @@ gh_install() {
   fi
 
   echo "Download URL: $url"
-  wget -q "$url" -O "$filename" && echo "Downloaded $filename successfully." || echo "Failed to download $filename."
+  curl -L "$url" -o "$filename" && echo "Downloaded $filename successfully." || echo "Failed to download $filename."
 }
 
 # Utility functions for managing processes
