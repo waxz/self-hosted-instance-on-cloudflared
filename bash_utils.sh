@@ -119,3 +119,42 @@ extract_all_env() {
         printf "%s=%s\n" "$key" "$val"
     done
 }
+
+# Start a daemon with PID tracking
+start_daemon() {
+    local name="$1"
+    local pid_file="$2"
+    local log_file="$3"
+    shift 3
+    local cmd="$@"
+    
+    rm -f "$pid_file"
+    
+    nohup setsid bash -c '
+        echo $$ > "'"$pid_file"'"
+        exec '"$cmd"'
+    ' > "$log_file" 2>&1 &
+    
+    sleep 2
+    
+    if [ -f "$pid_file" ] && kill -0 "$(cat "$pid_file")" 2>/dev/null; then
+        echo "✅ $name started (PID: $(cat "$pid_file"))"
+        return 0
+    else
+        echo "❌ $name failed to start"
+        return 1
+    fi
+}
+
+# Stop a daemon by PID file
+stop_daemon() {
+    local name="$1"
+    local pid_file="$2"
+    
+    if [ -f "$pid_file" ]; then
+        local pid=$(cat "$pid_file")
+        kill -9 "$pid" 2>/dev/null || true
+        rm -f "$pid_file"
+        echo "✅ $name stopped (PID: $pid)"
+    fi
+}

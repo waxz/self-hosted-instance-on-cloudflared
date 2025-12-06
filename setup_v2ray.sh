@@ -27,6 +27,7 @@ SUB_VMESS_PATH="/tmp/sub_vmess.txt"
 V2_CONFIG_PATH="/usr/local/etc/v2ray/config.json"
 V2_LOG_DIR="/var/log/v2ray"
 V2RAY_LOG="/tmp/v2ray.log"
+V2RAY_PID_FILE="/tmp/v2ray.pid"
 CLOUDFLARED_LOG="/tmp/cloudflared-tunnel-$PORT.log"
 WAIT_TIMEOUT=60
 # ---------------------------------------------------
@@ -132,9 +133,12 @@ EOF
 # --- 6. Start V2Ray (Initial) ---
 echo "=== Starting V2Ray (Initial) ==="
 # setsid: Detaches process from script session to prevent killing on exit
-nohup setsid v2ray run -c $V2_CONFIG_PATH >"$V2RAY_LOG" 2>&1 &
-V2_PID=$!
-disown $V2_PID
+# nohup setsid v2ray run -c $V2_CONFIG_PATH >"$V2RAY_LOG" 2>&1 &
+# V2_PID=$!
+# disown $V2_PID
+stop_daemon "V2Ray" $V2RAY_PID_FILE
+start_daemon "V2Ray" $V2RAY_PID_FILE $V2RAY_LOG "v2ray run -c $V2_CONFIG_PATH"
+
 
 sleep 1
 if ! ss -ltnp | grep -q "127.0.0.1:$PORT"; then
@@ -166,13 +170,16 @@ echo "=== Updating V2Ray Host header ==="
 jq --arg host "$PUBLIC_HOST" '.inbounds[0].streamSettings.wsSettings.headers.Host = $host' "$V2_CONFIG_PATH" >"${V2_CONFIG_PATH}.tmp" && mv "${V2_CONFIG_PATH}.tmp" "$V2_CONFIG_PATH"
 
 # Kill the initial V2Ray process and restart with new config
-kill $V2_PID 2>/dev/null || true
-wait $V2_PID 2>/dev/null || true
+# kill $V2_PID 2>/dev/null || true
+# wait $V2_PID 2>/dev/null || true
 
 echo "=== Restarting V2Ray with new config ==="
-nohup setsid v2ray run -c $V2_CONFIG_PATH >"$V2RAY_LOG" 2>&1 &
-NEW_V2_PID=$!
-disown $NEW_V2_PID
+# nohup setsid v2ray run -c $V2_CONFIG_PATH >"$V2RAY_LOG" 2>&1 &
+# NEW_V2_PID=$!
+# disown $NEW_V2_PID
+stop_daemon "V2Ray" $V2RAY_PID_FILE
+start_daemon "V2Ray" $V2RAY_PID_FILE $V2RAY_LOG "v2ray run -c $V2_CONFIG_PATH"
+
 sleep 1
 
 # --- 10. Generate Subscriptions ---
