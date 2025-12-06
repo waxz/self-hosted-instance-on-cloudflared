@@ -186,9 +186,11 @@ cat >"$SUB_JSON_PATH" <<EOF
 EOF
 
 # VMess Link (Base64)
+date=$(date '+%Y-%m-%d-%H-%M-%S')
+name="cf-tunnel-$date"
 NODE_JSON=$(jq -n \
-  --arg add "$PUBLIC_HOST" --arg id "$UUID" --arg host "$PUBLIC_HOST" --arg path "$WS_PATH" \
-  '{v:"2", ps:"CF-Tunnel", add:$add, port:"443", id:$id, aid:"0", net:"ws", type:"none", host:$host, path:$path, tls:"tls"}'
+  --arg add "$PUBLIC_HOST" --arg name "$name" --arg id "$UUID" --arg host "$PUBLIC_HOST" --arg path "$WS_PATH" \
+  '{v:"2", ps:$name, add:$add, port:"443", id:$id, aid:"0", net:"ws", type:"none", host:$host, path:$path, tls:"tls"}'
 )
 echo "vmess://$(echo -n "$NODE_JSON" | base64 -w0)" > "$SUB_VMESS_PATH"
 

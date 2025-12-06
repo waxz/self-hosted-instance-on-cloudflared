@@ -110,3 +110,6 @@ https://unix.stackexchange.com/questions/458713/how-are-files-under-etc-cron-d-u
 https://askubuntu.com/questions/1216322/error-bad-username-while-reading-etc-crontab
 https://unix.stackexchange.com/questions/67940/cron-ignores-variables-defined-in-bashrc-and-bash-profile
 https://stackoverflow.com/questions/9733338/remove-first-and-last-quote-from-a-variable
+
+ERROR (Missing newline before EOF, this crontab file will be ignored)
+https://cronitor.io/guides/missing-newline-before-eof
