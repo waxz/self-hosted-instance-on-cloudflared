@@ -55,6 +55,7 @@ fi
 
 # --- 2. Port Cleanup ---
 echo "=== 2. Clearing port $PORT ==="
+service v2ray stop || true
 free_port "$PORT" "v2ray run"
 
 echo "✅ Port $PORT is free."
