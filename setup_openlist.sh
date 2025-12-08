@@ -22,9 +22,15 @@ done
 # ------------------ Configuration ------------------
 PORT=5244
 FILEN_PORT=5255
+RCLONE_R2_1_PORT=5260
+RCLONE_R2_2_PORT=5261
+
 CLOUDFLARED_LOG="/tmp/cloudflared-tunnel-$PORT.log"
 OPENLIST_LOG="/tmp/openlist-$PORT.log"
 FILEN_LOG="/tmp/filen-$FILEN_PORT.log"
+RCLONE_R2_1_LOG="/tmp/rclone-$RCLONE_R2_1_PORT.log"
+RCLONE_R2_2_LOG="/tmp/rclone-$RCLONE_R2_2_PORT.log"
+
 WAIT_TIMEOUT=60
 
 OUTPUTFILE="/tmp/my_archive.tar.gz"
@@ -47,6 +53,7 @@ if [ "$tarvalid" -eq "0" ]; then
   
 else
  echo "$OUTPUTFILE is not valid, initializing new openlist config"
+ cd $CONFIGPATH && openlist admin set $JSONBINKEY
 fi
 
 
@@ -55,7 +62,7 @@ echo "=== 2. Setting up OpenList Configuration ==="
 
 kill_program "openlist server"
 # openlist admin set "$JSONBINKEY" --data /tmp/openlist_data/data
-cd $CONFIGPATH && openlist admin set $JSONBINKEY
+
 cat $CONFIGPATH/data/config.json | jq  '.log.name="/tmp/.openlist/log.log"' |sponge $CONFIGPATH/data/config.json
 if [ -d "$CONFIGPATH/data/log" ] ; then echo "removing log file" ;rm -r "$CONFIGPATH/data/log"; fi
 
@@ -67,6 +74,10 @@ sleep 3
 
 echo "=== 3. Starting Filen WebDAV Server ==="
 nohup setsid bash -c "filen webdav --email $FILEN_EMAIL --password $FILEN_PASSWORD --w-user $JSONBINKEY --w-password $JSONBINKEY --w-port $FILEN_PORT" > "$FILEN_LOG" 2>&1 &
+
+nohup setsid bash -c "rclone serve webdav  --htpasswd /opt/config/htpasswd  --addr 127.0.0.1:$RCLONE_R2_1_PORT  r2-1:" > "$RCLONE_R2_1_LOG" 2>&1 &
+nohup setsid bash -c "rclone serve webdav  --htpasswd /opt/config/htpasswd  --addr 127.0.0.1:$RCLONE_R2_2_PORT  r2-2:" > "$RCLONE_R2_2_LOG" 2>&1 &
+
 sleep 3
 # --- 5. Start Cloudflared Tunnel ---
 echo "=== 4. Starting cloudflared tunnel for OpenList and Filen ==="
