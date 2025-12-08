@@ -73,6 +73,8 @@ nohup setsid bash -c "cd $CONFIGPATH && openlist server" >"$OPENLIST_LOG" 2>&1 &
 sleep 3
 
 echo "=== 3. Starting Filen WebDAV Server ==="
+kill_program "filen webdav"
+kill_program "rclone serve webdav"
 nohup setsid bash -c "filen webdav --email $FILEN_EMAIL --password $FILEN_PASSWORD --w-user $JSONBINKEY --w-password $JSONBINKEY --w-port $FILEN_PORT" > "$FILEN_LOG" 2>&1 &
 
 nohup setsid bash -c "rclone serve webdav  --htpasswd /opt/config/htpasswd  --addr 127.0.0.1:$RCLONE_R2_1_PORT  r2-1:" > "$RCLONE_R2_1_LOG" 2>&1 &
