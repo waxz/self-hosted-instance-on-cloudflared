@@ -3,7 +3,7 @@ set -euo pipefail
 
 # --- Environment Setup ---
 source /bin/bash_utils.sh
-VARFILE="/opt/.vars" # or /home/codespace/.vars depending on env
+VARFILE="/opt/config/.vars" # or /home/codespace/.vars depending on env
 
 # Extract all environment variables
 while IFS='=' read -r k v; do

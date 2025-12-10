@@ -3,7 +3,7 @@ set -euo pipefail
 
 # --- Dependency Import & Environment Setup ---
 source /bin/bash_utils.sh
-VARFILE="/opt/.vars"
+VARFILE="/opt/config/.vars"
 
 # Extract all environment variables from the helper function
 while IFS='=' read -r k v; do
@@ -33,7 +33,7 @@ RCLONE_R2_2_LOG="/tmp/rclone-$RCLONE_R2_2_PORT.log"
 
 WAIT_TIMEOUT=60
 
-OUTPUTFILE="/tmp/my_archive.tar.gz"
+OUTPUTFILE="/tmp/openlist_archive.tar.gz"
 CONFIGPATH="/tmp/openlist_data"
 mkdir -p $CONFIGPATH
 echo OUTPUTFILE $OUTPUTFILE
@@ -113,8 +113,8 @@ echo "$JSONBINURL/$JSONBINOPENLISTPATH/?key=$JSONBINKEY&r=1"
 curl -s "$JSONBINURL/$JSONBINOPENLISTPATH/?key=$JSONBINKEY&q=url" -d "$PUBLIC_URL"
 echo "" # Newline for clean exit
 while true; do
-inotifywait -e modify,create,delete -r $CONFIGPATH && \
-tar -czvf $OUTPUTFILE $CONFIGPATH/data/ && \
+inotifywait -e modify,create,delete -r $CONFIGPATH/data && \
+cd $CONFIGPATH && tar -czvf $OUTPUTFILE ./data/ && \
 curl "$JSONBINURL/$JSONBINOPENLISTDATAPATH/?key=$JSONBINKEY" --data-binary @$OUTPUTFILE && \
 echo "✅ Openlist data updated to JSONBIN." && sleep 10
 done

@@ -10,7 +10,10 @@ fi
 
 chmod +x *.sh
 cp ./*.sh /bin
-cp .vars /opt/.vars
+mkdir -p /opt/config
+cp *yml /opt/config
+cp .vars /opt/config
+
 
 chmod 644 ./cron_proxy_jobs
 sed -i s#ubuntu#$USER# ./cron_proxy_jobs

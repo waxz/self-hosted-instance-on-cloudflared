@@ -3,7 +3,7 @@ set -euo pipefail
 
 # --- Dependency Import & Environment Setup ---
 source /bin/bash_utils.sh
-VARFILE="/opt/.vars"
+VARFILE="/opt/config/.vars"
 
 # Extract all environment variables from the helper function
 while IFS='=' read -r k v; do
