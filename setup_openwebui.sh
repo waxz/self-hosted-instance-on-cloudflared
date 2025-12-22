@@ -89,6 +89,17 @@ fusermount -u "$CONFIGPATH/data" 2>/dev/null || umount "$CONFIGPATH/data" 2>/dev
 
 RCLONE_MOUNT=1
 
+    sync_to_cloud() {
+        echo "⬆️ Syncing data to Cloud..."
+        rclone sync "$CONFIGPATH/data" "$OPENWEBUIRCLONEPATH" \
+            --transfers 4 \
+            --create-empty-src-dirs \
+            --exclude "*.log" \
+            --exclude "*.tmp" \
+            --exclude "*.pid"
+        echo "✅ Sync complete at $(date)"
+    }
+
 if [ -z "$RCLONE_MOUNT" ]; then
 rclone mount "$OPENWEBUIRCLONEPATH" "$CONFIGPATH/data" \
     --cache-dir /tmp/.rclone_cache \
@@ -106,25 +117,66 @@ rclone mount "$OPENWEBUIRCLONEPATH" "$CONFIGPATH/data" \
     --daemon
 else
 
+# --- Check for inotifywait ---
+    if ! command -v inotifywait >/dev/null 2>&1; then
+        echo "❌ 'inotify-tools' is missing. Please run: apt-get install -y inotify-tools"
+        exit 1
+    fi
 
-rclone sync "$OPENWEBUIRCLONEPATH" "$CONFIGPATH/data" \
-    --transfers 4 \
-    --checkers 8 \
-    --buffer-size 64M \
-    -P
+# --- A. Smart Restore (Cloud -> Local) ---
+    echo "⬇️ Restoring data from Cloud (Smart Update)..."
+    rclone copy "$OPENWEBUIRCLONEPATH" "$CONFIGPATH/data" \
+        --update \
+        --transfers 4 \
+        --buffer-size 100M \
+        -P
 
-# Sync back periodically in background (every 10 minutes)
-(
-    while true; do
-        sleep 600
-        rclone sync "$CONFIGPATH/data" "$OPENWEBUIRCLONEPATH" \
-            --transfers 4 \
-            --max-age 30m \
-            --no-traverse
-    done
-) &
 
-echo "✅ Data synced locally, periodic backup enabled"
+
+# --- C. Trap Exit Signals ---
+    trap 'echo "🛑 Script stopping! Final sync..."; sync_to_cloud; exit' SIGINT SIGTERM EXIT
+
+    # --- D. Watch for 'close_write' with Debounce ---
+    (
+        echo "👀 Listening for completed file writes..."
+        
+        while true; do
+            # 1. BLOCK until the FIRST 'close_write', 'move', or 'delete' event happens.
+            # We exclude logs to prevent unnecessary triggers.
+            inotifywait -r \
+                -e close_write,moved_to,delete \
+                "$CONFIGPATH/data" \
+                --exclude ".*\.log" \
+                -qq
+
+            # 2. THE DEBOUNCE LOOP (The "Cool-down" Phase)
+            # Once an event is detected, we enter this loop.
+            # We verify that NO NEW events happen for 5 seconds.
+            while true; do
+                # Check for MORE events with a 5-second timeout (-t 5)
+                if inotifywait -r -e close_write,moved_to,delete "$CONFIGPATH/data" --exclude ".*\.log" -qq -t 5; then
+                    # If inotifywait returns 0 (True), it means ANOTHER event happened inside the 5s window.
+                    # So we loop again and restart the 5-second timer.
+                    echo "⏳ Detected ongoing activity, resetting timer..."
+                    continue
+                else
+                    # If inotifywait returns 1/2 (False), it timed out. 
+                    # This means 5 seconds passed with NO new writes.
+                    # We are safe to sync.
+                    break
+                fi
+            done
+
+            # 3. Trigger Sync
+            sync_to_cloud
+        done
+    ) &
+    BG_PID=$!
+    
+    trap "kill $BG_PID 2>/dev/null; sync_to_cloud; exit" SIGINT SIGTERM EXIT
+
+    echo "✅ Live Sync Active: Triggered 5s after file activity stops."
+
 
 fi
 

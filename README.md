@@ -47,6 +47,15 @@ https://<JSONBINURL>/_forward/<JSONBINOPENLISTPATH>/<JSONBINV2RAYPATH>/urlsplit/
 ![raidrive-webdav](assets/raidrive-webdav.png)
 
 
+## open-webui
+
+```bash
+./setup_openwebui.sh
+
+```
+
+
+
 ## v2ray
 
 
