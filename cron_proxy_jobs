@@ -4,5 +4,6 @@ SHELL=/bin/bash
 @reboot root /bin/setup_v2ray.sh
 @reboot root /bin/setup_ttyd.sh
 @reboot root /bin/setup_openlist.sh
-
+@reboot root /bin/setup_vaultwarden.sh
+@reboot root /bin/setup_1panel.sh
 */3 * * * * root /bin/vps_auto_reboot.sh
