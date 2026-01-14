@@ -42,10 +42,10 @@ PANEL_INSTALLED=false
 CLOUDFLARED_INSTALLED=false
 
 if command -v $PROGRAM >/dev/null 2>&1; then
-    echo "✅ 1PANEL is installed."
+    echo "✅ $PROGRAM is installed."
     PANEL_INSTALLED=true
 else
-    echo "⚠️ 1PANEL not found. Will install."
+    echo "⚠️ $PROGRAM not found. Will install."
 fi
 
 if command -v cloudflared >/dev/null 2>&1; then
@@ -55,13 +55,7 @@ else
     echo "⚠️ cloudflared not found. Will install."
 fi
 
-# --- 2. Cleanup & Port Release ---
-echo "=== 2. Force releasing port $PORT ==="
-
-free_port "$PORT" $PROGRAM_PATH
-echo "✅ Port $PORT is free."
-
-# --- 3. Install Dependencies (if missing) ---
+# --- 2. Install Dependencies (if missing) ---
 if [ "$PANEL_INSTALLED" = false ]; then
     echo "=== Installing $PROGRAM ==="
     curl -sSL https://resource.1panel.pro/quick_start.sh -o /tmp/quick_start.sh && bash /tmp/quick_start.sh
@@ -73,7 +67,17 @@ if [ "$CLOUDFLARED_INSTALLED" = false ]; then
     cp /tmp/cloudflared /bin
 fi
 
-# --- 4. Start PANEL ---
+# --- 3. Cleanup & Port Release ---
+echo "=== 2. Force releasing port $PORT ==="
+
+free_port "$PORT" $PROGRAM_PATH
+echo "✅ Port $PORT is free."
+
+
+
+
+
+# --- 4. Start ---
 echo "=== Starting $PROGRAM on 127.0.0.1:$PORT ==="
 
 stop_daemon "$PROGRAM" $PROGRAM_PID_FILE
