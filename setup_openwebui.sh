@@ -102,6 +102,7 @@ RCLONE_MOUNT=1
 
 if [ -z "$RCLONE_MOUNT" ]; then
 rclone mount "$OPENWEBUIRCLONEPATH" "$CONFIGPATH/data" \
+    --exclude "$CONFIGPATH/data/cache/**"
     --cache-dir /tmp/.rclone_cache \
     --vfs-cache-mode full \
     --vfs-cache-max-age 168h \
@@ -191,7 +192,7 @@ echo "=== 6. Starting Open-webui service ==="
 
 kill_program "open-webui serve --port" 2>/dev/null || true
 
-DATA_DIR="$CONFIGPATH/data" nohup open-webui serve --port "$PORT" --host 0.0.0.0 >"$OPENWEBUI_LOG" 2>&1 &
+WEBUI_SECRET_KEY="my_openwebui_sec" DATA_DIR="$CONFIGPATH/data" nohup open-webui serve --port "$PORT" --host 0.0.0.0 >"$OPENWEBUI_LOG" 2>&1 &
 echo $! > "$OPENWEBUI_PID_FILE"
 
 # Wait for service to start
