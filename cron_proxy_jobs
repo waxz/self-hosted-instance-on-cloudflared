@@ -1,7 +1,7 @@
 SHELL=/bin/bash
 # @reboot root /bin/proxy_gost_cf.sh
 # @reboot root /bin/proxy_gost_pinggy.sh
-@reboot root /bin/setup_v2ray.sh
+@reboot root /bin/setup_v2ray_vless.sh
 @reboot root /bin/setup_ttyd.sh
 @reboot root /bin/setup_openlist.sh
 @reboot root /bin/setup_vaultwarden.sh

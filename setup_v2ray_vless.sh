@@ -3,7 +3,7 @@ set -euo pipefail
 
 # --- Environment Setup ---
 source /bin/bash_utils.sh
-VARFILE="/opt/config/.vars" # or /home/codespace/.vars depending on env
+VARFILE="/opt/config/.vars"
 
 # Extract all environment variables
 while IFS='=' read -r k v; do
@@ -41,9 +41,15 @@ fi
 # --- 1. Dependency Checks ---
 echo "=== 1. Checking installations ==="
 V2_INSTALLED=false
-if command -v v2ray >/dev/null 2>&1; then
+
+if command -v xray >/dev/null 2>&1; then
+    echo "✅ Xray is installed."
+    V2_INSTALLED=true
+    V2RAY_CMD="xray"
+elif command -v v2ray >/dev/null 2>&1; then
     echo "✅ V2Ray is installed."
     V2_INSTALLED=true
+    V2RAY_CMD="v2ray"
 fi
 
 if ! command -v cloudflared >/dev/null 2>&1; then
@@ -55,54 +61,60 @@ fi
 
 # --- 2. Port Cleanup ---
 echo "=== 2. Clearing port $PORT ==="
-service v2ray stop || true
+service v2ray stop 2>/dev/null || true
+service xray stop 2>/dev/null || true
 free_port "$PORT" "v2ray run"
+free_port "$PORT" "xray run"
 
 echo "✅ Port $PORT is free."
 
-# --- 3. Install V2Ray (if missing) ---
+# --- 3. Install if missing ---
 if [ "$V2_INSTALLED" = false ]; then
-    echo "=== Installing V2Ray ==="
+    echo "=== Installing Xray-core ==="
     apt update -y && apt install -y curl jq uuid-runtime || true
-    bash <(curl -L https://raw.githubusercontent.com/v2fly/fhs-install-v2ray/master/install-release.sh)
+    bash <(curl -L https://github.com/XTLS/Xray-install/raw/main/install-release.sh)
+    V2RAY_CMD="xray"
 fi
 
 # --- 4. Configuration Prep ---
 UUID=$(uuidgen)
 echo "Generated UUID: $UUID"
 
-# Set up logs
 mkdir -p "$V2_LOG_DIR"
-# Attempt to detect systemd user, fallback to root if in container
-V2_USER=$(grep '^User=' /etc/systemd/system/v2ray.service 2>/dev/null | cut -d= -f2 || echo "root")
-V2_GROUP=$(grep '^Group=' /etc/systemd/system/v2ray.service 2>/dev/null | cut -d= -f2 || echo "root")
+if [ -f /etc/systemd/system/xray.service ]; then
+    V2_USER=$(grep '^User=' /etc/systemd/system/xray.service 2>/dev/null | cut -d= -f2 || echo "root")
+    V2_GROUP=$(grep '^Group=' /etc/systemd/system/xray.service 2>/dev/null | cut -d= -f2 || echo "root")
+else
+    V2_USER=$(grep '^User=' /etc/systemd/system/v2ray.service 2>/dev/null | cut -d= -f2 || echo "root")
+    V2_GROUP=$(grep '^Group=' /etc/systemd/system/v2ray.service 2>/dev/null | cut -d= -f2 || echo "root")
+fi
 chown -R "$V2_USER:$V2_GROUP" "$V2_LOG_DIR"
 chmod 755 "$V2_LOG_DIR"
 
-# --- 5. Write Initial V2Ray Config ---
-echo "=== Writing V2Ray config ==="
+# --- 5. Write Config (VLESS + WebSocket) ---
+echo "=== Writing config (VLESS + WebSocket) ==="
 mkdir -p "$(dirname "$V2_CONFIG_PATH")"
 
-PROTOCOL="vless"
-# Note: "listen": "127.0.0.1" is CRITICAL. It forces IPv4 to prevent connection errors.
 cat >"$V2_CONFIG_PATH" <<EOF
 {
   "inbounds": [
     {
       "port": $PORT,
       "listen": "127.0.0.1",
-      "protocol": "$PROTOCOL",
+      "protocol": "vless",
       "settings": {
         "clients": [
           {
             "id": "$UUID",
-            "level": 0
+            "level": 0,
+            "flow": ""
           }
         ],
         "decryption": "none"
       },
       "streamSettings": {
         "network": "ws",
+        "security": "none",
         "wsSettings": {
           "path": "$WS_PATH",
           "headers": {
@@ -115,81 +127,76 @@ cat >"$V2_CONFIG_PATH" <<EOF
   "outbounds": [
     {
       "protocol": "freedom",
-      "settings": {}
+      "settings": {
+        "domainStrategy": "UseIP"
+      }
     }
   ],
   "log": {
     "access": "$V2_LOG_DIR/access.log",
     "error": "$V2_LOG_DIR/error.log",
-    "loglevel": "warning"
+    "loglevel": "debug"
   }
 }
 EOF
 
-# --- 6. Start V2Ray (Initial) ---
-echo "=== Starting V2Ray (Initial) ==="
-# setsid: Detaches process from script session to prevent killing on exit
-# nohup setsid v2ray run -c $V2_CONFIG_PATH >"$V2RAY_LOG" 2>&1 &
-# V2_PID=$!
-# disown $V2_PID
-stop_daemon "V2Ray" $V2RAY_PID_FILE
-start_daemon "V2Ray" $V2RAY_PID_FILE $V2RAY_LOG "v2ray run -c $V2_CONFIG_PATH"
-
-
-sleep 1
-if ! ss -ltnp | grep -q "127.0.0.1:$PORT"; then
-    echo "❌ V2Ray failed to start. Logs:"
-    tail -n 5 "$V2RAY_LOG"
+if ! jq empty "$V2_CONFIG_PATH" 2>/dev/null; then
+    echo "❌ Invalid JSON!"
     exit 1
 fi
-echo "✅ V2Ray listening on 127.0.0.1:$PORT"
 
-# --- 7. Start Cloudflared Tunnel ---
-echo "=== Starting cloudflared tunnel ==="
+# --- 6. Start Xray ---
+echo "=== Starting $V2RAY_CMD ==="
+stop_daemon "$V2RAY_CMD" $V2RAY_PID_FILE
+start_daemon "$V2RAY_CMD" $V2RAY_PID_FILE $V2RAY_LOG "$V2RAY_CMD run -c $V2_CONFIG_PATH"
+
+sleep 2
+if ! ss -ltnp | grep -q "127.0.0.1:$PORT"; then
+    echo "❌ Failed to start. Logs:"
+    tail -n 20 "$V2RAY_LOG"
+    exit 1
+fi
+echo "✅ Listening on 127.0.0.1:$PORT"
+
+# --- 7. Start Cloudflared ---
+echo "=== Starting cloudflared ==="
 /bin/setup_cftunnel.sh "$PORT"
 
-# --- 8. Wait for Public URL ---
-echo "Waiting for tunnel URL..."
+# --- 8. Get URL ---
+echo "Waiting for URL..."
 PUBLIC_URL=""
-PUBLIC_URL=$(grep -Eo 'https?://[A-Za-z0-9.-]+\.trycloudflare\.com' "$CLOUDFLARED_LOG" | head -n1 || true)
-    
+for i in {1..30}; do
+    PUBLIC_URL=$(grep -Eo 'https?://[A-Za-z0-9.-]+\.trycloudflare\.com' "$CLOUDFLARED_LOG" | head -n1 || true)
+    [ -n "$PUBLIC_URL" ] && break
+    sleep 1
+done
+
 if [ -z "$PUBLIC_URL" ]; then
-    echo "❌ Failed to obtain URL. Check log: $CLOUDFLARED_LOG"
+    echo "❌ No URL found"
+    tail -n 20 "$CLOUDFLARED_LOG"
     exit 1
 fi
 
 echo "✅ URL: $PUBLIC_URL"
 PUBLIC_HOST=$(echo "$PUBLIC_URL" | sed -E 's#^https?://([^/:]+).*#\1#')
 
-# --- 9. Update Config & Hot Restart ---
-# We update the 'Host' header in V2Ray config to match the Cloudflare domain
-echo "=== Updating V2Ray Host header ==="
+# --- 9. Update Host & Restart ---
+echo "=== Updating host ==="
 jq --arg host "$PUBLIC_HOST" '.inbounds[0].streamSettings.wsSettings.headers.Host = $host' "$V2_CONFIG_PATH" >"${V2_CONFIG_PATH}.tmp" && mv "${V2_CONFIG_PATH}.tmp" "$V2_CONFIG_PATH"
 
-# Kill the initial V2Ray process and restart with new config
-# kill $V2_PID 2>/dev/null || true
-# wait $V2_PID 2>/dev/null || true
+stop_daemon "$V2RAY_CMD" $V2RAY_PID_FILE
+start_daemon "$V2RAY_CMD" $V2RAY_PID_FILE $V2RAY_LOG "$V2RAY_CMD run -c $V2_CONFIG_PATH"
 
-echo "=== Restarting V2Ray with new config ==="
-# nohup setsid v2ray run -c $V2_CONFIG_PATH >"$V2RAY_LOG" 2>&1 &
-# NEW_V2_PID=$!
-# disown $NEW_V2_PID
-stop_daemon "V2Ray" $V2RAY_PID_FILE
-start_daemon "V2Ray" $V2RAY_PID_FILE $V2RAY_LOG "v2ray run -c $V2_CONFIG_PATH"
+sleep 2
 
-sleep 1
-
-# --- 10. Generate Subscriptions ---
+# --- 10. Generate Subscription ---
 date=$(date '+%Y-%m-%d-%H-%M-%S')
-name="cf-tunnel-$date"
+name="cf-ws-$date"
 
-# VLESS subscription format (not VMess!)
-# Format: vless://UUID@HOST:PORT?encryption=none&security=tls&type=ws&host=HOST&path=PATH#NAME
-VLESS_LINK="vless://${UUID}@${PUBLIC_HOST}:443?encryption=none&security=tls&type=ws&host=${PUBLIC_HOST}&path=${WS_PATH}#${name}"
+VLESS_LINK="vless://${UUID}@${PUBLIC_HOST}:443?encryption=none&security=tls&type=ws&host=${PUBLIC_HOST}&path=${WS_PATH}&flow=#${name}"
 
 echo "$VLESS_LINK" > "$SUB_DATA_PATH"
 
-# Also generate JSON for compatibility
 cat >"$SUB_JSON_PATH" <<EOF
 [{
     "protocol": "vless",
@@ -203,33 +210,28 @@ cat >"$SUB_JSON_PATH" <<EOF
     "host": "$PUBLIC_HOST",
     "path": "$WS_PATH",
     "tls": "tls",
-    "sni": "$PUBLIC_HOST"
+    "sni": "$PUBLIC_HOST",
+    "flow": ""
 }]
 EOF
 
-# --- 11. Verification ---
-echo "=== Verifying connectivity ==="
+# --- 11. Test ---
+echo "=== Testing ==="
 sleep 4
 HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "$PUBLIC_URL" || true)
+echo "HTTP Response: $HTTP_CODE"
 
-if [[ "$HTTP_CODE" =~ ^2|3|4 ]]; then
-    echo "✅ Tunnel Reachable: HTTP $HTTP_CODE"
-else
-    echo "⚠️  Tunnel returned HTTP $HTTP_CODE (Check firewall or logs)"
-fi
-
-# --- 12. Final Output ---
+# --- 12. Output ---
 echo
-echo "=== Setup Complete ==="
+echo "=== Complete ==="
+echo "Protocol: VLESS + WebSocket"
 echo "UUID: $UUID"
-echo "URL:  $PUBLIC_URL"
-echo "Sub:  $VLESS_LINK"
+echo "URL: $PUBLIC_URL"
 echo
-echo "Subscription link:"
 cat "$SUB_DATA_PATH"
 echo
-echo "Uploading to JSONBIN..."
-echo "$JSONBINURL/$JSONBINV2RAYPATH/?key=$JSONBINKEY&q=sub" "->" @"$PUBLIC_URL"
 curl -s "$JSONBINURL/$JSONBINV2RAYPATH/?key=$JSONBINKEY&q=sub" -d @"$SUB_DATA_PATH"
-echo ""
-echo "✅ All done! Import the subscription link into V2RayN or compatible client."
+echo
+echo "✅ Done! Check logs if delay test fails:"
+echo "   sudo tail -f /var/log/v2ray/access.log"
+echo "   sudo tail -f /var/log/v2ray/error.log"
