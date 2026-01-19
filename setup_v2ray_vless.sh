@@ -195,7 +195,14 @@ name="cf-ws-$date"
 
 VLESS_LINK="vless://${UUID}@${PUBLIC_HOST}:443?encryption=none&security=tls&type=ws&host=${PUBLIC_HOST}&path=${WS_PATH}&flow=#${name}"
 
-echo "$VLESS_LINK" > "$SUB_DATA_PATH"
+echo "$VLESS_LINK" > "$SUB_DATA_PATH.temp"
+
+name="cf-ws"
+VLESS_LINK="vless://${UUID}@${PUBLIC_HOST}:443?encryption=none&security=tls&type=ws&host=${PUBLIC_HOST}&path=${WS_PATH}&flow=#${name}"
+
+echo "$VLESS_LINK" >> "$SUB_DATA_PATH.temp"
+
+base64 -w0 $SUB_DATA_PATH.temp > "$SUB_DATA_PATH"
 
 cat >"$SUB_JSON_PATH" <<EOF
 [{
