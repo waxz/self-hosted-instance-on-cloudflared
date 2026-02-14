@@ -1,6 +1,8 @@
 #!/bin/bash
 # Utility functions for bash scripts
 # gh_install vi/websocat websocat.x86_64-unknown-linux-musl
+
+
 gh_install() {
 
   if [[ $# -ne 3 ]]; then
@@ -17,10 +19,35 @@ gh_install() {
   local url=""
   local count=0
 
-  while [[ -z "$url" && $count -lt 5 ]]; do
+  while [[ -z "$url" && "$count" -lt 5 ]]; do
     content=$(curl -s -L -H "Accept: application/vnd.github+json" "https://api.github.com/repos/$repo/releases")
-    url=$(echo "$content" | jq -r --arg arch "$arch" '.[0] | .assets[] | .browser_download_url | select(endswith($arch))')
-    count=$((count + 1))
+
+    # 1. Get the list of all matching URLs as an array
+    all_matches=$(echo "$content" | jq -r --arg arch "$arch" '.[0].assets[] | select(.name | endswith($arch)) | .browser_download_url')
+
+    # 2. Count how many matches were found
+    if [[ -z "$all_matches" ]]; then
+        match_count=0
+    else
+        match_count=$(echo "$all_matches" | grep -c '^http' || echo 0)
+    
+    fi
+
+    if [[ "$match_count" -gt 1 ]]; then
+      echo "Error: Multiple assets match '$arch'. Please be more specific."
+      echo "Matches found:"
+      echo "$all_matches"
+      return 1
+    elif [[ "$match_count" -eq 1 ]]; then
+      url="$all_matches"
+      break;
+    else
+      # No matches, loop continues to retry...
+      echo "No match found for '$arch' (Attempt $((count + 1))/5)"
+      count=$((count + 1))
+      sleep 1
+    fi
+
   done
 
   if [[ -z "$url" ]]; then
@@ -29,6 +56,7 @@ gh_install() {
   fi
 
   echo "Download URL: $url"
+  echo "Download filename: $filename"
   curl -L "$url" -o "$filename" && echo "Downloaded $filename successfully." || echo "Failed to download $filename."
 }
 
