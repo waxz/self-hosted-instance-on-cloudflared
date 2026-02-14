@@ -2,6 +2,7 @@
 # Utility functions for bash scripts
 # gh_install vi/websocat websocat.x86_64-unknown-linux-musl
 
+# set -x
 
 gh_install() {
 
@@ -237,4 +238,58 @@ free_port() {
     
     echo "✅ Port $port is free."
     return 0
+}
+
+nohup_run(){
+  if [[  $# -lt 2 ]];then
+    echo "usage: nohp_run logfile cmd"
+    return
+  fi
+    local logfile=$1
+  local cmd=$2
+  nohup bash -c "$cmd" > "$logfile" 2>&1 &
+}
+cf_tunnel(){
+  if [[  $# -lt 2 ]];then
+    echo "usage: cf_tunnel output_var port"
+    return
+  fi
+
+  echo "First arg: $1"
+  local output_var=$1
+  local port=$2
+
+  echo "The rest: $all_after_second"
+  local all_after_second="${@:3}"
+
+
+
+  local CLOUDFLARED_LOG="/tmp/cf-$port.log"
+  echo cloudflared tunnel --url localhost:$port $all_after_second --logfile $CLOUDFLARED_LOG
+  ps_kill "cloudflared tunnel --url localhost:$port"
+  if [[ -f "$CLOUDFLARED_LOG" ]] ; then rm $CLOUDFLARED_LOG || true;fi
+  nohup_run "/dev/null" "cloudflared tunnel --url localhost:$port $all_after_second --logfile $CLOUDFLARED_LOG"
+
+
+
+  WAIT_TIMEOUT=60
+  #echo "Waiting up to $WAIT_TIMEOUT seconds for cloudflared public URL in $CLOUDFLARED_LOG"
+  #exit 0
+  END_TIME=$(( $(date +%s) + WAIT_TIMEOUT ))
+  PUBLIC_URL=""
+
+  while [ "$(date +%s)" -le "$END_TIME" ]; do
+    if [[ ! -f $CLOUDFLARED_LOG ]];then
+      echo "Cannot find $CLOUDFLARED_LOG"
+      sleep 1
+    else
+      # Regex matches standard TryCloudflare URLs
+      PUBLIC_URL=$(grep -Eo 'https?://[A-Za-z0-9.-]+\.trycloudflare\.com' "$CLOUDFLARED_LOG" | head -n1 || true)
+      if [ -n "$PUBLIC_URL" ]; then break; fi
+      sleep 1 
+    fi 
+
+  done
+  echo $PUBLIC_URL
+  eval "$output_var='$PUBLIC_URL'"
 }
